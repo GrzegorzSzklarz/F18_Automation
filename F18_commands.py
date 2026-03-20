@@ -18,6 +18,10 @@ class F18Commands:
         self.rm = pyvisa.ResourceManager()
         try:
             self.bridge = self.rm.open_resource(resource_string)
+            
+            self.bridge.timeout = 10000    
+            self.bridge.clear()
+            
             self.bridge.read_termination = '\r\n'
             self.bridge.write_termination = '\r\n'
             self.bridge.timeout = 5000 
@@ -104,6 +108,7 @@ class F18Commands:
             if sqrt2_multiplier:
                 code += 10 # Codes 10-18 add sqrt(2) multiplier
             self.bridge.write(f"C{code}")
+            time.sleep(1.5)
             status = "ON" if sqrt2_multiplier else "OFF"
             print(f"[INFO] Current set to {current_ma} mA (sqrt(2) mode: {status}).")
         else:

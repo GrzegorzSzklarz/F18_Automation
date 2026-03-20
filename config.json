@@ -17,7 +17,7 @@
     "source_impedance_ohm": 100,
     
     "reference_resistor_name": "100_standard_resistor",
-    "reference_resistance": null
+    "reference_resistance": null,
 	
 	"SH_mode": 2,
     "SH_point_multipliers": [1, 4, 1]
