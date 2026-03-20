@@ -187,6 +187,7 @@ try:
     f18.auto_balance()
     f18.set_source_impedance(SOURCE_IMPEDANCE_OHM)
     
+    # Initialize report files with headers if they don't exist
     for rep_file in [REPORT_ALL_FILE, REPORT_BALANCED_FILE]:
         if not os.path.exists(rep_file):
             with open(rep_file, "w") as f:
@@ -205,7 +206,7 @@ try:
             base_pts_for_this_bw = POINTS_PER_STEP_LIST[bw_idx]
             pts_for_this_bw = POINTS_PER_STEP_LIST[bw_idx]
             
-            # Recalculate delay dynamically based on current bandwidth
+            # Recalculate time required for one measurement point based on bandwidth
             DELAY_SEC = 1.0 / current_bw
             
             print("\n============================================================")
@@ -220,10 +221,6 @@ try:
                 
                 # Use a list to store segments for the multi-colored plot
                 gain_segments = []
-                
-                # Buffers for the static plot report
-                all_ratios_for_gain = []
-                all_status_for_gain = []
                 
                 # LEVEL 3: Sweep through Base Currents
                 for base_curr in BASE_CURRENT_MA_LIST:
@@ -243,7 +240,7 @@ try:
                         sequence_steps.append({"is_sqrt2": True,  "mult": SH_MULTIPLIERS[1], "label": f"{base_curr}*1.41"})
                         sequence_steps.append({"is_sqrt2": False, "mult": SH_MULTIPLIERS[2], "label": f"{base_curr}_post"})
                     
-                    # Execute the sequence
+                    # Execute the current sequence
                     for step in sequence_steps:
                         enable_sqrt2 = step["is_sqrt2"]
                         current_label = step["label"]
@@ -253,10 +250,38 @@ try:
                         f18.set_current(base_curr, sqrt2_multiplier=enable_sqrt2)
                         print(f"\n[STARTING] Gain: {current_gain} | Current: {current_label} mA | Pts: {pts_to_collect}")
                         
-                        stabilization_time = max(30, DELAY_SEC * 12) 
-                        print(f"[WAIT] Stabilizing for {stabilization_time} seconds...")
-                        time.sleep(stabilization_time)
+                        # -------------------------------------------------------------
+                        # 1. SMART AUTO-STABILIZATION (Prevents recording garbage data)
+                        # -------------------------------------------------------------
+                        max_stab_time = max(60, int(DELAY_SEC * 15))
+                        print(f"[WAIT] Waiting for bridge stabilization (max {max_stab_time} s)...")
                         
+                        stab_start_time = time.time()
+                        consecutive_b = 0
+                        required_b = 3  # Target: 3 consecutive 'B' (Balanced) statuses
+                        
+                        while (time.time() - stab_start_time) < max_stab_time:
+                            data = f18.get_measurement()
+                            if data is not None:
+                                s = data['status_code']
+                                if s == 'B':
+                                    consecutive_b += 1
+                                    if consecutive_b >= required_b:
+                                        print(f"[INFO] Bridge stabilized ({required_b}x 'B'). Stabilization time: {int(time.time() - stab_start_time)} s.")
+                                        break
+                                else:
+                                    consecutive_b = 0  # Reset counter if bridge loses balance
+                            
+                            # Sleep dynamically based on bandwidth to avoid spamming the GPIB port
+                            time.sleep(max(1.0, DELAY_SEC * 0.5))
+                            plt.pause(0.01) # Keep the plot GUI responsive
+                            
+                        if consecutive_b < required_b:
+                            print(f"[WARNING] Stabilization timeout reached! Starting measurement anyway (Check parameters for {current_label} mA).")
+                        
+                        # -------------------------------------------------------------
+                        # 2. DATA COLLECTION LOOP
+                        # -------------------------------------------------------------
                         step_ratios_all = []
                         step_status_plot = []
                         step_ratios_balanced = []
@@ -276,30 +301,41 @@ try:
                                 
                                 step_ratios_all.append(r)
                                 step_status_plot.append(STATUS_PLOT_VAL.get(s, 0))
-                                if s == 'B': step_ratios_balanced.append(r)
+                                if s == 'B': 
+                                    step_ratios_balanced.append(r)
                                 
                                 global_idx += 1
                                 x_display.append(global_idx)
                                 y_ratio.append(r)
                                 y_status.append(STATUS_PLOT_VAL.get(s, 0))
                                 
+                                # Update plot only every 5 points to save CPU resources
                                 if points_collected % 5 == 0:
                                     line_ratio.set_data(range(len(y_ratio)), y_ratio)
                                     line_status.set_data(range(len(y_status)), y_status)
-                                    ax1.relim(); ax1.autoscale_view()
-                                    ax2.relim(); ax2.autoscale_view()
+                                    ax1.relim()
+                                    ax1.autoscale_view()
+                                    ax2.relim()
+                                    ax2.autoscale_view()
                                     plt.pause(0.01)
-                                    print(f"BW:{current_bw} | G:{current_gain} | I:{current_label}mA | Pkt:{points_collected}/{pts_to_collect} | R:{r:.8f} | S:{s}")
+                                    
+                                    print(f"BW:{current_bw} | G:{current_gain} | I:{current_label}mA | Pkt:{points_collected+1}/{pts_to_collect} | R:{r:.8f} | S:{s}")
                                 
                                 points_collected += 1
+                                
+                                # This prevents 'VI_ERROR_CONN_LOST' by giving the bridge time to compute.
+                                time.sleep(DELAY_SEC * 0.9)
                             
-                            time.sleep(0.5)
-                            plt.pause(DELAY_SEC)
-                            
+                            else:
+                                # If communication fails momentarily, wait 1 second and retry
+                                time.sleep(1.0)
+                                
+                        # Save statistical data for the completed step
                         gain_segments.append((current_label, step_ratios_all, step_status_plot))
                         append_stats_report(REPORT_ALL_FILE, current_label, current_gain, current_bw, step_ratios_all, REF_RESISTANCE)
                         append_stats_report(REPORT_BALANCED_FILE, current_label, current_gain, current_bw, step_ratios_balanced, REF_RESISTANCE)
                 
+                # Generate and save the plot for the current gain step
                 save_sequence_plot(current_gain, current_bw, gain_segments)
                         
     print("\n[SUCCESS] Entire experiment matrix completed successfully.")
