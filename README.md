@@ -147,13 +147,15 @@ When observing the live plot or console logs, pay close attention to the **Statu
 
 
 ## 📊 Data Output & Reporting
-The script automatically organizes output using the prefix `{Thermometer}_{Temperature}_`:
+To keep your workspace organized, the script automatically creates a dedicated subfolder for each experiment. All outputs are saved in the following directory structure:
+**`Results/{Thermometer}_{Temperature}/`**
 
-* **`..._matrix_results.csv`**: The primary data log containing raw ratios and converted resistance values ($\Omega$).
-* **`..._report_all.csv`**: Statistics calculated from every data point collected.
-* **`..._report_balanced.csv`**: Statistics filtered for **"Balanced" (Status B)** points only—highly recommended for final calibration values.
-* **`..._Report_BW...png`**: High-quality plots where each current step is visualized in a different color.
+Inside this specific directory, all files are further organized with the `{Thermometer}_{Temperature}_` prefix to prevent data mixing:
 
+* **`..._matrix_results.csv`**: The primary data log containing raw ratios, converted resistance values ($\Omega$), and real-time bridge status.
+* **`..._report_all.csv`**: Statistics calculated from *every* data point collected during the step, including transitional and out-of-balance points.
+* **`..._report_balanced.csv`**: Statistics strictly filtered for **"Balanced" (Status B)** points only—**highly recommended** for deriving your final calibration values.
+* **`Report_BW...png`**: High-quality, automatically generated plots where each current step is visualized as a separate, color-coded series.
 ---
 
 ## ⚖️ License
