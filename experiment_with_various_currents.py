@@ -2,6 +2,7 @@ import time
 import os
 import json
 import csv
+import sys
 import numpy as np
 from datetime import datetime
 from collections import deque
@@ -59,7 +60,7 @@ POINTS_PER_STEP_LIST = config.get("points_per_step_list", [1000])
 
 assert len(BANDWIDTH_HZ_LIST) == len(POINTS_PER_STEP_LIST), "BANDWIDTH and POINTS lists must be the same size!"
 
-GAINS_TO_TEST = config.get("gains_to_test", [0, 1, 2])
+GAINS_TO_TEST = config.get("gains_to_test", [1, 10, 100])
 BASE_CURRENT_MA_LIST = config.get("base_current_ma_list", [1.0])
 SOURCE_IMPEDANCE_OHM = config.get("source_impedance_ohm", 100)
 
@@ -110,7 +111,7 @@ except SystemExit:
         f18 = F18Commands(found_addr)
     else:
         print("[FATAL] No F18 bridge found on any GPIB address. Exiting.")
-        sys.exit(1)
+        sys.exit()
 
 # --- LIVE PLOT SETUP ---
 plt.ion()
@@ -258,7 +259,7 @@ try:
                         
                         stab_start_time = time.time()
                         consecutive_b = 0
-                        required_b = 3  # Target: 3 consecutive 'B' (Balanced) statuses
+                        required_b = 5  # Target: 5 consecutive 'B' (Balanced) statuses
                         
                         while (time.time() - stab_start_time) < max_stab_time:
                             data = f18.get_measurement()
