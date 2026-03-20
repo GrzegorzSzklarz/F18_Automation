@@ -18,16 +18,21 @@ class F18Commands:
         self.rm = pyvisa.ResourceManager()
         try:
             self.bridge = self.rm.open_resource(resource_string)
-            
-            self.bridge.timeout = 10000    
-            self.bridge.clear()
+
+            self.bridge.timeout = 15000       
+            self.bridge.clear()            
             
             self.bridge.read_termination = '\r\n'
             self.bridge.write_termination = '\r\n'
-            self.bridge.timeout = 5000 
+            
+            self.bridge.send_end = True         
+            self.bridge.delay_after_write = 0.1
+            
+            import time
+            time.sleep(1.0)
             
             # Internal variable to track status of the meter (default 0)
-            self._meter_mode = 0 
+            self._meter_mode = 0
             
             print(f"[INFO] Successfully connected to: {resource_string}")
         except Exception as e:
