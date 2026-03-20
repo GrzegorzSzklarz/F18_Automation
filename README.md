@@ -6,11 +6,11 @@ A professional Python-based automation tool for characterizing resistance thermo
 
 ## 🌟 Key Features
 - **Automated Matrix:** Sweeps through multiple bandwidths, gains, and currents without manual intervention.
+- **Smart Auto-Stabilization:** Intelligent "Wait-for-Balance" logic that starts recording only when the bridge is stable (Status B).
+- **High-Performance Live Plotting:** Powered by **PyQtGraph** for smooth, lag-free real-time visualization of thousands of points.
 - **Advanced SH Logic:** Supports Standard (Base/Sqrt2), Single, and Metrological (Pre-heat/Heat/Post-heat) recovery modes.
-- **Smart Hardware Handling:** Includes an intelligent GPIB scanner to locate the bridge automatically.
-- **Metrological Reporting:** Generates detailed CSV logs with calculated Resistance ($\Omega$), Standard Deviation ($StdDev$), and Standard Error ($SEM$).
-- **Visual Feedback:** Real-time plotting and automatic generation of color-coded PNG reports for each gain sequence.
-
+- **Intelligent Error Handling:** Automatic session recovery and "Headless" report generation to prevent crashes during long runs.
+- 
 ---
 
 ## 🛠️ Prerequisites
@@ -22,6 +22,7 @@ A professional Python-based automation tool for characterizing resistance thermo
 ### Software
 - **NI-VISA Drivers:** You must install the [National Instruments VISA driver](https://www.ni.com/en-gb/support/downloads/drivers/download.ni-visa.html) for GPIB communication.
 - **Python 3.8+**
+- **PyQtGraph & PySide6:** For the high-speed live monitor.
 
 ---
 
@@ -66,6 +67,11 @@ pip install -r requirements.txt
 ├── LICENSE                 # MIT License details
 ├── README.md               # Main documentation
 └── README_CONFIG.md        # Technical guide for configuration
+├── Results/                # AUTO-GENERATED: Experiment data & reports
+│   └── {Sensor}_{Temp}/    # Subfolder for specific test runs
+│       ├── ..._results.csv # Raw data log
+│       ├── ..._report.csv  # Statistical summaries
+│       └── Report_...png   # Automated color-coded plots
 ```
 
 ---
@@ -113,7 +119,7 @@ The script follows a rigorous metrological procedure to ensure data integrity du
 
 1.  **Hardware Initialization:** The system attempts to connect to the ASL F18 bridge. If the default address fails, it automatically performs an intelligent scan of all GPIB addresses (0–31).
 2.  **Parameter Setup:** The bridge is configured with the first set of parameters from your matrix, including **Bandwidth**, **Gain**, and **Excitation Current**.
-3.  **Thermal Stabilization:** After every parameter change, the script enters a **"Wait State."** It calculates the required stabilization time ($10 \times \text{Response Time}$) to allow the sensor, bridge electronics, and thermal medium to reach equilibrium.
+3. **Smart Stabilization & Dynamic Wait State:** The script employs an active feedback loop that monitors the bridge status in real-time. Data collection begins after achieving 5 consecutive "Balanced" (B) readings, ensuring full thermal and electronic equilibrium. If stability is not reached within a safety timeout, the system logs a warning but starts to collect data to prevent hanging on a single problematic setting.
 4.  **Data Collection:** Points are collected according to the values defined in the `points_per_step_list`.
 5.  **Real-time Monitoring:**
     * **Live Plot:** A dedicated window displays the last 2000 points of the Resistance Ratio and the Bridge Balance status.
