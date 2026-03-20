@@ -46,12 +46,15 @@ with open(config_path, "r") as f:
 THERMOMETER_NAME = config.get("thermometer_name", "UnknownThermometer")
 TEMPERATURE = config.get("temperature", "UnknownTemp")
 
+OUTPUT_DIR = os.path.join("Results", f"{THERMOMETER_NAME}_{TEMPERATURE}")
+os.makedirs(OUTPUT_DIR, exist_ok=True)
+
 # Auto-generate file names with the required prefix
 prefix = f"{THERMOMETER_NAME}_{TEMPERATURE}_"
 
-OUTPUT_FILE_NAME = prefix + config.get("output_file_base", "matrix_results.csv")
-REPORT_ALL_FILE = prefix + config.get("report_all_base", "report_all.csv")
-REPORT_BALANCED_FILE = prefix + config.get("report_balanced_base", "report_balanced.csv")
+OUTPUT_FILE_NAME = os.path.join(OUTPUT_DIR, prefix + config.get("output_file_base", "matrix_results.csv"))
+REPORT_ALL_FILE = os.path.join(OUTPUT_DIR, prefix + config.get("report_all_base", "report_all.csv"))
+REPORT_BALANCED_FILE = os.path.join(OUTPUT_DIR, prefix + config.get("report_balanced_base", "report_balanced.csv"))
 
 # 3. Hardware and loop parameters
 DEFAULT_BRIDGE_ADDR = config.get("bridge_address", "GPIB0::4::INSTR")
@@ -159,7 +162,9 @@ def save_sequence_plot(gain, bandwidth, segments):
     s_ax2.set_ylabel("Status")
     s_ax2.set_ylim(-0.5, 3.5)
     
-    fname = f"Report_BW{bandwidth}Hz_G{gain}_{datetime.now().strftime('%H%M%S')}.png"
+    filename_only = f"Report_BW{bandwidth}Hz_G{gain}_{datetime.now().strftime('%H%M%S')}.png"
+    fname = os.path.join(OUTPUT_DIR, filename_only)
+    
     plt.savefig(fname)
     plt.close(fig_save)
     plt.ion()
