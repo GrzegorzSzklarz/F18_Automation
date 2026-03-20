@@ -16,7 +16,7 @@ The configuration file must be named `config.json` and located in the script's r
     "bandwidth_hz_list": [0.1, 0.5],
     
     "points_per_step_list": [1000, 200],
-    "gains_to_test": [0, 1, 2],
+    "gains_to_test": [1, 10, 100],
     
     "base_current_ma_list": [1.0, 2.0],
     "source_impedance_ohm": 100,
@@ -39,7 +39,7 @@ The configuration file must be named `config.json` and located in the script's r
 | `bridge_address` | String | GPIB Resource string (e.g., "GPIB0::4::INSTR"). | No | Auto-scan |
 | `bandwidth_hz_list` | List | Detector bandwidths to sweep (0.5, 0.1, 0.02). | No | `[0.5]` |
 | `points_per_step_list` | List | Base points to collect (must match BW list length). | No | `[1000]` |
-| `gains_to_test` | List | Gain levels to sweep (integer 0 to 7). | No | `[0, 1, 2]` |
+| `gains_to_test` | List | Gain multipliers (1, 10, 100, 1000, etc.)| No | `[1, 100, 100000]` |
 | `base_current_ma_list`| List | Array of base currents in mA. | No | `[1.0]` |
 | `source_impedance_ohm`| Int | Matching bridge impedance (1, 10, 100). | No | `100` |
 | `reference_resistor_name`| String | Name of the standard from `resistors_db.csv`. | No | "" |
