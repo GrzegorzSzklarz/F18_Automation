@@ -8,6 +8,8 @@ from datetime import datetime
 from collections import deque
 import matplotlib.pyplot as plt
 import matplotlib
+import pyqtgraph as pg
+from pyqtgraph.Qt import QtWidgets
 
 # Import the custom F18 control class from our library
 from F18_commands import F18Commands
@@ -116,59 +118,106 @@ except SystemExit:
         print("[FATAL] No F18 bridge found on any GPIB address. Exiting.")
         sys.exit()
 
-# --- LIVE PLOT SETUP ---
-plt.ion()
-fig_live, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 8), sharex=True, gridspec_kw={'height_ratios': [3, 1]})
-fig_live.canvas.manager.set_window_title('ASL F18 - Automated Test Matrix')
+#=============================================================================
+# --- LIVE PLOT SETUP (Using PyQtGraph for high performance) ---
+# =============================================================================
 
-line_ratio, = ax1.plot([], [], 'b-', linewidth=1, label="Ratio")
-line_status, = ax2.step([], [], 'r-', where='post', label="Status")
+# Initialize the Qt Application (required for PyQtGraph)
+app = QtWidgets.QApplication.instance()
+if app is None:
+    app = QtWidgets.QApplication([])
 
-ax1.set_ylabel("Resistance Ratio")
-ax1.grid(True, alpha=0.3)
-ax1.set_title("Real-time Measurement Data")
+# Create a window for the real-time monitor
+win = pg.GraphicsLayoutWidget(show=True, title="ASL F18 - Automated Test Matrix")
+win.resize(1000, 700)
+win.setWindowTitle('ASL F18 Real-time Monitor')
 
-ax2.set_ylabel("Status (3=Balanced)")
-ax2.set_ylim(-0.5, 3.5)
-ax2.grid(True, alpha=0.3)
-ax2.set_xlabel("Global Measurement Index")
+# Plot 1: Resistance Ratio (Upper Plot)
+p1 = win.addPlot(title="Real-time Resistance Ratio")
+p1.setLabel('left', "Ratio")
+p1.showGrid(x=True, y=True, alpha=0.3)
+curve_ratio = p1.plot(pen=pg.mkPen('b', width=1.5)) # Blue line
 
+win.nextRow() # Move to the next row for the status plot
+
+# Plot 2: Bridge Status (Lower Plot)
+p2 = win.addPlot(title="Bridge Status (3=Balanced, 2=Low, 1=High, 0=Error)")
+p2.setLabel('left', "Status")
+p2.setLabel('bottom', "Global Measurement Index")
+p2.setYRange(-0.5, 3.5)
+p2.showGrid(x=True, y=True, alpha=0.3)
+# Step mode "center" mimics the behavior of matplotlib's 'post' step
+curve_status = p2.plot(pen=pg.mkPen('r', width=1.5), stepMode="center") 
+
+# Link X-axes so zooming/panning on one moves the other
+p2.setXLink(p1)
+
+# Buffer settings
 max_plot_points = 2000
 x_display = deque(maxlen=max_plot_points)
 y_ratio = deque(maxlen=max_plot_points)
 y_status = deque(maxlen=max_plot_points)
 
+# =============================================================================
+# --- REPORT PLOTTING (Using Matplotlib 'Agg' for background saving) ---
+# =============================================================================
+
 def save_sequence_plot(gain, bandwidth, segments):
-    """Saves a plot where each current is a separate colored series."""
-    if not segments: return
-    plt.ioff()
-    fig_save, (s_ax1, s_ax2) = plt.subplots(2, 1, figsize=(12, 8))
+    """
+    Generates and saves a multi-color report plot for the current gain step.
+    Uses 'Agg' backend to save in the background without opening windows.
+    """
+    if not segments:
+        return
+        
+    import matplotlib
+    # Switch to non-interactive backend to avoid conflicts with PyQtGraph
+    original_backend = matplotlib.get_backend()
+    matplotlib.use('Agg')
+    import matplotlib.pyplot as plt
+
+    # Create the figure for the report
+    fig_save, (s_ax1, s_ax2) = plt.subplots(2, 1, figsize=(12, 8), sharex=True, 
+                                            gridspec_kw={'height_ratios': [3, 1]})
     
     current_x = 0
     all_status_combined = []
     
+    # Plot each current step as a separate series/color
     for label, ratios, status_nums in segments:
         x_vals = range(current_x, current_x + len(ratios))
-        s_ax1.plot(x_vals, ratios, label=f"I: {label} mA")
+        s_ax1.plot(x_vals, ratios, label=f"Current: {label} mA")
         all_status_combined.extend(status_nums)
         current_x += len(ratios)
     
-    s_ax1.set_title(f"Gain {gain} | BW {bandwidth}Hz | {THERMOMETER_NAME} @ {TEMPERATURE}")
-    s_ax1.set_ylabel("Ratio")
+    # Format Upper Plot (Ratio)
+    s_ax1.set_title(f"Gain: {gain} | BW: {bandwidth} Hz | {THERMOMETER_NAME} @ {TEMPERATURE}")
+    s_ax1.set_ylabel("Resistance Ratio")
     s_ax1.legend(loc='upper right', fontsize='small', ncol=2)
     s_ax1.grid(True, alpha=0.3)
     
+    # Format Lower Plot (Status)
     s_ax2.step(range(len(all_status_combined)), all_status_combined, 'k-', where='post')
     s_ax2.set_ylabel("Status")
     s_ax2.set_ylim(-0.5, 3.5)
+    s_ax2.set_xlabel("Measurement Index")
+    s_ax2.grid(True, alpha=0.1)
     
+    # Define file path within the results subdirectory
     filename_only = f"Report_BW{bandwidth}Hz_G{gain}_{datetime.now().strftime('%H%M%S')}.png"
     fname = os.path.join(OUTPUT_DIR, filename_only)
     
-    plt.savefig(fname)
+    # Save with high DPI for better readability
+    plt.savefig(fname, dpi=150, bbox_inches='tight')
     plt.close(fig_save)
-    plt.ion()
-    print(f"[INFO] Saved color-coded plot: {fname}")
+    
+    # Restore original backend (optional, for safety)
+    try:
+        matplotlib.use(original_backend)
+    except:
+        pass
+        
+    print(f"[INFO] Report plot saved successfully: {fname}")
     
 def append_stats_report(filename, current_label, gain, bw, data_list, ref_val):
     """Appends summary statistics including Ratio and Resistance."""
@@ -301,35 +350,37 @@ try:
                                 r, s = data['ratio'], data['status_code']
                                 resistance_ohm = r * REF_RESISTANCE
                                 
+                                # Save raw data to file immediately
                                 timestamp = now.strftime('%Y-%m-%d,%H:%M:%S')
                                 file.write(f"{timestamp},{r:.8f},{resistance_ohm:.8f},{s},{current_gain},{current_label},{current_bw}\n")
                                 file.flush()
                                 
+                                # Internal buffers for statistics
                                 step_ratios_all.append(r)
                                 step_status_plot.append(STATUS_PLOT_VAL.get(s, 0))
                                 if s == 'B': 
                                     step_ratios_balanced.append(r)
                                 
+                                # Buffers for live plotting
                                 global_idx += 1
                                 x_display.append(global_idx)
                                 y_ratio.append(r)
                                 y_status.append(STATUS_PLOT_VAL.get(s, 0))
                                 
-                                # Update plot only every 5 points to save CPU resources
-                                if points_collected % 5 == 0:
-                                    line_ratio.set_data(range(len(y_ratio)), y_ratio)
-                                    line_status.set_data(range(len(y_status)), y_status)
-                                    ax1.relim()
-                                    ax1.autoscale_view()
-                                    ax2.relim()
-                                    ax2.autoscale_view()
-                                    plt.pause(0.01)
-                                    
-                                    print(f"BW:{current_bw} | G:{current_gain} | I:{current_label}mA | Pkt:{points_collected+1}/{pts_to_collect} | R:{r:.8f} | S:{s}")
+                                # --- FAST REFRESH (PyQtGraph) ---
+                                # We update EVERY point now because PyQtGraph is much faster than Matplotlib
+                                curve_ratio.setData(list(y_ratio))
+                                curve_status.setData(list(y_status))
+                                
+                                # This is critical: it tells the GUI to process the update immediately
+                                app.processEvents()
+                                
+                                # Console log for tracking progress
+                                print(f"BW:{current_bw} | G:{current_gain} | I:{current_label}mA | Pkt:{points_collected+1}/{pts_to_collect} | R:{r:.8f} | S:{s}")
                                 
                                 points_collected += 1
                                 
-                                # This prevents 'VI_ERROR_CONN_LOST' by giving the bridge time to compute.
+                                # Smart Sleep: Wait for 90% of the bridge cycle time to keep GPIB bus stable
                                 time.sleep(DELAY_SEC * 0.9)
                             
                             else:
