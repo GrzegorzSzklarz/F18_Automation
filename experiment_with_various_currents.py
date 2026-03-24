@@ -26,14 +26,21 @@ except:
 def load_resistor_db(filepath):
     """Loads the resistor database from a CSV file into a dictionary."""
     db = {}
-    if os.path.exists(filepath):
-        with open(filepath, mode='r', encoding='utf-8') as f:
+    
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    absolute_path = os.path.join(base_dir, filepath)
+    
+    if os.path.exists(absolute_path):
+        with open(absolute_path, mode='r', encoding='utf-8-sig') as f:
             reader = csv.DictReader(f)
             for row in reader:
                 # Key: Name, Value: Resistance as float
-                db[row['Name'].strip()] = float(row['Resistance'])
+                if 'Name' in row and 'Resistance' in row and row['Name']:
+                    db[row['Name'].strip()] = float(row['Resistance'])
+        
     else:
-        print(f"[WARNING] Resistor database file '{filepath}' not found!")
+        print(f"[WARNING] Resistor database file not found at: {absolute_path}")
+        
     return db
 
 # 1. Load the JSON configuration file
