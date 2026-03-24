@@ -102,7 +102,7 @@ else:
 
 # =============================================================================
 
-STATUS_PLOT_VAL = {'B': 3, 'L': 2, 'H': 1, 'E': 0}
+STATUS_PLOT_VAL = {'E': 0, 'L': 1, 'B': 2, 'H': 3}
 
 # --- ATTEMPT CONNECTION WITH AUTO-SCAN ---
 f18 = None
@@ -141,15 +141,18 @@ curve_ratio = p1.plot(pen=pg.mkPen('b', width=1.5)) # Blue line
 win.nextRow() # Move to the next row for the status plot
 
 # Plot 2: Bridge Status (Lower Plot)
-p2 = win.addPlot(title="Bridge Status (3=Balanced, 2=Low, 1=High, 0=Error)")
+p2 = win.addPlot(title="Bridge Status")
 p2.setLabel('left', "Status")
-p2.setLabel('bottom', "Global Measurement Index")
-p2.setYRange(-0.5, 3.5)
-p2.showGrid(x=True, y=True, alpha=0.3)
-# Step mode "center" mimics the behavior of matplotlib's 'post' step
-curve_status = p2.plot(pen=pg.mkPen('r', width=1.5), stepMode="center") 
+p2.setYRange(-0.2, 3.2)
 
-# Link X-axes so zooming/panning on one moves the other
+# --- Custom Y-Axis Ticks (E, L, B, H instead of 0, 1, 2, 3) ---
+ay = p2.getAxis('left')
+# Define ticks: [(numerical_value, label_to_display), ...]
+ticks = [[(0, 'E'), (1, 'L'), (2, 'B'), (3, 'H')]]
+ay.setTicks(ticks)
+
+p2.showGrid(x=True, y=True, alpha=0.3)
+curve_status = p2.plot(pen=pg.mkPen('r', width=1.5)) # Standard line for better performance
 p2.setXLink(p1)
 
 # Buffer settings
@@ -196,10 +199,15 @@ def save_sequence_plot(gain, bandwidth, segments):
     s_ax1.legend(loc='upper right', fontsize='small', ncol=2)
     s_ax1.grid(True, alpha=0.3)
     
-    # Format Lower Plot (Status)
+    # Format Lower Plot (Status) in the report
     s_ax2.step(range(len(all_status_combined)), all_status_combined, 'k-', where='post')
     s_ax2.set_ylabel("Status")
     s_ax2.set_ylim(-0.5, 3.5)
+    
+    # Set custom ticks for Matplotlib Report ---
+    s_ax2.set_yticks([0, 1, 2, 3])
+    s_ax2.set_yticklabels(['E', 'L', 'B', 'H'])
+    
     s_ax2.set_xlabel("Measurement Index")
     s_ax2.grid(True, alpha=0.1)
     
