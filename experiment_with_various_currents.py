@@ -9,7 +9,7 @@ from collections import deque
 import matplotlib.pyplot as plt
 import matplotlib
 import pyqtgraph as pg
-from pyqtgraph.Qt import QtWidgets
+from pyqtgraph.Qt import QtWidgets, QtCore
 
 # Import the custom F18 control class from our library
 from F18_commands import F18Commands
@@ -122,6 +122,9 @@ except SystemExit:
 # --- LIVE PLOT SETUP (Using PyQtGraph for high performance) ---
 # =============================================================================
 
+pg.setConfigOption('background', 'w')
+pg.setConfigOption('foreground', 'k')
+
 # Initialize the Qt Application (required for PyQtGraph)
 app = QtWidgets.QApplication.instance()
 if app is None:
@@ -133,8 +136,9 @@ win.resize(1000, 700)
 win.setWindowTitle('ASL F18 Real-time Monitor')
 
 # Plot 1: Resistance Ratio (Upper Plot)
-p1 = win.addPlot(title="Real-time Resistance Ratio")
-p1.setLabel('left', "Ratio")
+p1 = win.addPlot(title="Real-time Resistance")
+p1.setLabel('left', "Resistance, Ohm")
+p1.getAxis('left').enableAutoSIPrefix(False)
 p1.showGrid(x=True, y=True, alpha=0.3)
 curve_ratio = p1.plot(pen=pg.mkPen('b', width=1.5)) # Blue line
 
@@ -168,61 +172,82 @@ y_status = deque(maxlen=max_plot_points)
 def save_sequence_plot(gain, bandwidth, segments):
     """
     Generates and saves a multi-color report plot for the current gain step.
-    Uses 'Agg' backend to save in the background without opening windows.
+    Uses the Matplotlib 'Agg' backend to save the file in the background,
+    preventing UI thread conflicts with the real-time PyQtGraph window.
+
+    Args:
+        gain (int/str): The amplifier gain setting used for the sequence.
+        bandwidth (float/str): The filter bandwidth setting in Hz.
+        segments (list of tuples): Data segments collected during the gain step.
+                                   Each tuple contains (current_label, resistances_list, status_list).
     """
     if not segments:
         return
         
     import matplotlib
-    # Switch to non-interactive backend to avoid conflicts with PyQtGraph
+    # Switch to a non-interactive backend to avoid conflicts with PyQtGraph
     original_backend = matplotlib.get_backend()
     matplotlib.use('Agg')
     import matplotlib.pyplot as plt
+    import os
+    from datetime import datetime
 
-    # Create the figure for the report
-    fig_save, (s_ax1, s_ax2) = plt.subplots(2, 1, figsize=(12, 8), sharex=True, 
-                                            gridspec_kw={'height_ratios': [3, 1]})
+    # Create the figure for the static report
+    fig_save, (s_ax1, s_ax2) = plt.subplots(
+        2, 1, 
+        figsize=(12, 8), 
+        sharex=True, 
+        gridspec_kw={'height_ratios': [3, 1]}
+    )
     
     current_x = 0
     all_status_combined = []
     
-    # Plot each current step as a separate series/color
-    for label, ratios, status_nums in segments:
-        x_vals = range(current_x, current_x + len(ratios))
-        s_ax1.plot(x_vals, ratios, label=f"Current: {label} mA")
+    # Plot each current step as a separate color-coded series
+    for label, resistances, status_nums in segments:
+        x_vals = range(current_x, current_x + len(resistances))
+        s_ax1.plot(x_vals, resistances, label=f"Current: {label} mA")
         all_status_combined.extend(status_nums)
-        current_x += len(ratios)
+        current_x += len(resistances)
     
-    # Format Upper Plot (Ratio)
+    # -------------------------------------------------------------------------
+    # Format Upper Plot (Resistance)
+    # -------------------------------------------------------------------------
     s_ax1.set_title(f"Gain: {gain} | BW: {bandwidth} Hz | {THERMOMETER_NAME} @ {TEMPERATURE}")
-    s_ax1.set_ylabel("Resistance Ratio")
+    s_ax1.set_ylabel("Resistance (Ohm)")
     s_ax1.legend(loc='upper right', fontsize='small', ncol=2)
     s_ax1.grid(True, alpha=0.3)
     
-    # Format Lower Plot (Status) in the report
+    # -------------------------------------------------------------------------
+    # Format Lower Plot (Status)
+    # -------------------------------------------------------------------------
     s_ax2.step(range(len(all_status_combined)), all_status_combined, 'k-', where='post')
     s_ax2.set_ylabel("Status")
     s_ax2.set_ylim(-0.5, 3.5)
     
-    # Set custom ticks for Matplotlib Report ---
+    # Set custom metrological ticks for the Matplotlib Report
+    # 0: Error, 1: Low, 2: Balanced, 3: High
     s_ax2.set_yticks([0, 1, 2, 3])
     s_ax2.set_yticklabels(['E', 'L', 'B', 'H'])
     
     s_ax2.set_xlabel("Measurement Index")
     s_ax2.grid(True, alpha=0.1)
     
-    # Define file path within the results subdirectory
+    # -------------------------------------------------------------------------
+    # File Saving and Cleanup
+    # -------------------------------------------------------------------------
+    # Define file path within the dedicated results subdirectory
     filename_only = f"Report_BW{bandwidth}Hz_G{gain}_{datetime.now().strftime('%H%M%S')}.png"
     fname = os.path.join(OUTPUT_DIR, filename_only)
     
-    # Save with high DPI for better readability
+    # Save with high DPI for better readability of signal noise
     plt.savefig(fname, dpi=150, bbox_inches='tight')
     plt.close(fig_save)
     
-    # Restore original backend (optional, for safety)
+    # Restore the original Matplotlib backend safely
     try:
         matplotlib.use(original_backend)
-    except:
+    except Exception:
         pass
         
     print(f"[INFO] Report plot saved successfully: {fname}")
@@ -348,6 +373,7 @@ try:
                         step_ratios_all = []
                         step_status_plot = []
                         step_ratios_balanced = []
+                        step_resistances_all = []
                         
                         points_collected = 0
                         while points_collected < pts_to_collect:
@@ -368,15 +394,17 @@ try:
                                 step_status_plot.append(STATUS_PLOT_VAL.get(s, 0))
                                 if s == 'B': 
                                     step_ratios_balanced.append(r)
+                                    
+                                # Save Resistance for the PNG Report
+                                step_resistances_all.append(resistance_ohm)
                                 
                                 # Buffers for live plotting
                                 global_idx += 1
                                 x_display.append(global_idx)
-                                y_ratio.append(r)
+                                y_ratio.append(resistance_ohm)
                                 y_status.append(STATUS_PLOT_VAL.get(s, 0))
                                 
                                 # --- FAST REFRESH (PyQtGraph) ---
-                                # We update EVERY point now because PyQtGraph is much faster than Matplotlib
                                 curve_ratio.setData(list(y_ratio))
                                 curve_status.setData(list(y_status))
                                 
@@ -384,7 +412,7 @@ try:
                                 app.processEvents()
                                 
                                 # Console log for tracking progress
-                                print(f"BW:{current_bw} | G:{current_gain} | I:{current_label}mA | Pkt:{points_collected+1}/{pts_to_collect} | R:{r:.8f} | S:{s}")
+                                # print(f"BW:{current_bw} | G:{current_gain} | I:{current_label}mA | Pkt:{points_collected+1}/{pts_to_collect} | R:{r:.8f} | S:{s}")
                                 
                                 points_collected += 1
                                 
@@ -396,7 +424,7 @@ try:
                                 time.sleep(1.0)
                                 
                         # Save statistical data for the completed step
-                        gain_segments.append((current_label, step_ratios_all, step_status_plot))
+                        gain_segments.append((current_label, step_resistances_all, step_status_plot))
                         append_stats_report(REPORT_ALL_FILE, current_label, current_gain, current_bw, step_ratios_all, REF_RESISTANCE)
                         append_stats_report(REPORT_BALANCED_FILE, current_label, current_gain, current_bw, step_ratios_balanced, REF_RESISTANCE)
                 
